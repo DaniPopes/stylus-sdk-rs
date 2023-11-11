@@ -20,13 +20,12 @@ impl From<alloy_sol_types::Error> for Error {
 }
 
 impl From<Error> for Vec<u8> {
-    #[allow(unused)]
     fn from(err: Error) -> Vec<u8> {
         match err {
             Error::Revert(data) => data,
             Error::AbiDecodingFailed(err) => {
                 console!("failed to decode return data from external call: {err}");
-                Panic::from(PanicKind::Generic).encode()
+                Panic::from(PanicKind::Generic).abi_encode()
             }
         }
     }

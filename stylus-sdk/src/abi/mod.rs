@@ -56,7 +56,7 @@ where
 /// When combined with alloy, which provides the reverse direction, a two-way relationship is formed.
 ///
 /// Additionally, `AbiType` provides a `const` equivalent to alloy's [`SolType::sol_type_name`].
-pub trait AbiType {
+pub trait AbiType: alloy_sol_types::private::SolTypeValue<Self::SolType> {
     /// The associated Solidity type.
     type SolType: SolType<RustType = Self>;
 

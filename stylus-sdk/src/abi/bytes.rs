@@ -1,14 +1,10 @@
 // Copyright 2023, Offchain Labs, Inc.
 // For licensing, see https://github.com/OffchainLabs/stylus-sdk-rs/blob/stylus/licenses/COPYRIGHT.md
 
-use crate::{
-    abi::{AbiType, ConstString},
-    crypto,
-    util::evm_padded_length,
-};
+use crate::abi::{AbiType, ConstString};
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
-use alloy_sol_types::{token::PackedSeqToken, Encodable, SolType};
+use alloy_sol_types::{abi::token::PackedSeqToken, private::SolTypeValue, sol_data, SolType};
 use core::ops::{Deref, DerefMut};
 
 /// Represents a [`bytes`] in Solidity.
@@ -60,49 +56,40 @@ impl AsMut<[u8]> for Bytes {
 /// [`abi`]: crate::abi
 pub struct BytesSolType;
 
+#[doc(hidden)]
+impl SolTypeValue<BytesSolType> for Bytes {
+    fn stv_to_tokens(&self) -> PackedSeqToken<'_> {
+        <Vec<u8> as SolTypeValue<sol_data::Bytes>>::stv_to_tokens(&self.0)
+    }
+
+    fn stv_abi_encoded_size(&self) -> usize {
+        <Vec<u8> as SolTypeValue<sol_data::Bytes>>::stv_abi_encoded_size(&self.0)
+    }
+
+    fn stv_abi_encode_packed_to(&self, out: &mut Vec<u8>) {
+        <Vec<u8> as SolTypeValue<sol_data::Bytes>>::stv_abi_encode_packed_to(&self.0, out)
+    }
+
+    fn stv_eip712_data_word(&self) -> alloy_sol_types::Word {
+        <Vec<u8> as SolTypeValue<sol_data::Bytes>>::stv_eip712_data_word(&self.0)
+    }
+}
+
 impl SolType for BytesSolType {
     type RustType = Bytes;
 
     type TokenType<'a> = PackedSeqToken<'a>;
 
-    const ENCODED_SIZE: Option<usize> = None;
-
-    #[inline]
-    fn encoded_size(bytes: &Self::RustType) -> usize {
-        32 + evm_padded_length(bytes.len())
-    }
-
-    #[inline]
     fn sol_type_name() -> Cow<'static, str> {
-        "bytes".into()
+        sol_data::Bytes::sol_type_name()
     }
 
-    #[inline]
-    fn type_check(_: &Self::TokenType<'_>) -> alloy_sol_types::Result<()> {
-        Ok(()) // Any PackedSeqToken is valid bytes
+    fn valid_token(token: &Self::TokenType<'_>) -> bool {
+        sol_data::Bytes::valid_token(token)
     }
 
-    #[inline]
     fn detokenize(token: Self::TokenType<'_>) -> Self::RustType {
-        Bytes(token.0.into())
-    }
-
-    #[inline]
-    fn eip712_data_word(bytes: &Self::RustType) -> alloy_sol_types::Word {
-        // "The dynamic values bytes and string are encoded as a keccak256 hash of their contents."
-        // - https://eips.ethereum.org/EIPS/eip-712#definition-of-encodedata
-        crypto::keccak(bytes)
-    }
-
-    #[inline]
-    fn encode_packed_to(bytes: &Self::RustType, out: &mut Vec<u8>) {
-        out.extend_from_slice(bytes);
-    }
-}
-
-impl Encodable<BytesSolType> for Bytes {
-    fn to_tokens(&self) -> PackedSeqToken<'_> {
-        PackedSeqToken(&self.0)
+        sol_data::Bytes::detokenize(token).into()
     }
 }
 

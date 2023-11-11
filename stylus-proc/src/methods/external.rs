@@ -5,7 +5,7 @@ use crate::types::{self, Purity};
 use convert_case::{Case, Casing};
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
-use quote::quote;
+use quote::{quote, ToTokens};
 use std::{mem, str::FromStr};
 use syn::{
     parenthesized,
@@ -22,7 +22,7 @@ pub fn external(_attr: TokenStream, input: TokenStream) -> TokenStream {
     let mut abi = quote!();
 
     for item in input.items.iter_mut() {
-        let ImplItem::Method(method) = item else {
+        let ImplItem::Fn(method) = item else {
             continue;
         };
 
@@ -31,24 +31,24 @@ pub fn external(_attr: TokenStream, input: TokenStream) -> TokenStream {
         let mut override_id = None;
         let mut override_name = None;
         for attr in mem::take(&mut method.attrs) {
-            let Some(ident) = attr.path.get_ident() else {
+            let Some(ident) = attr.path().get_ident() else {
                 continue;
             };
             if let Ok(elem) = Purity::from_str(&ident.to_string()) {
-                if !attr.tokens.is_empty() {
-                    error!(attr.tokens, "attribute does not take parameters");
+                if attr.meta.require_path_only().is_err() {
+                    error!(attr.meta, "attribute does not take parameters");
                 }
                 if purity.is_some() {
-                    error!(attr.path, "more than one purity attribute");
+                    error!(attr.path(), "more than one purity attribute");
                 }
                 purity = Some(elem);
                 continue;
             }
             if *ident == "selector" {
                 if override_id.is_some() || override_name.is_some() {
-                    error!(attr.path, "more than one selector attribute");
+                    error!(attr.path(), "more than one selector attribute");
                 }
-                let args = match syn::parse2::<SelectorArgs>(attr.tokens.clone()) {
+                let args = match syn::parse2::<SelectorArgs>(attr.meta.to_token_stream()) {
                     Ok(args) => args,
                     Err(error) => error!(ident, "{}", error),
                 };
@@ -58,8 +58,6 @@ pub fn external(_attr: TokenStream, input: TokenStream) -> TokenStream {
             }
             method.attrs.push(attr);
         }
-
-        use Purity::*;
 
         // determine purity if not
         let mut args = method.sig.inputs.iter().peekable();
@@ -71,20 +69,20 @@ pub fn external(_attr: TokenStream, input: TokenStream) -> TokenStream {
             }
             Some(FnArg::Typed(PatType { ty, .. })) => match &**ty {
                 Type::Reference(ty) => ty.mutability.into(),
-                _ => Pure,
+                _ => Purity::Pure,
             },
-            _ => Pure,
+            _ => Purity::Pure,
         };
 
         // enforce purity
         let purity = purity.unwrap_or(needed_purity);
-        if purity == Pure && purity < needed_purity {
+        if purity == Purity::Pure && purity < needed_purity {
             error!(args.next(), "pure method must not access storage");
         }
-        if purity == View && purity < needed_purity {
+        if purity == Purity::View && purity < needed_purity {
             error!(args.next(), "storage is &mut, but the method is {purity}");
         }
-        if needed_purity > Pure {
+        if needed_purity > Purity::Pure {
             args.next(); // drop first arg
         }
 
@@ -108,7 +106,7 @@ pub fn external(_attr: TokenStream, input: TokenStream) -> TokenStream {
 
         // deny value when method isn't payable
         let mut deny_value = quote!();
-        if purity != Payable {
+        if purity != Purity::Payable {
             let name = name.to_string();
             deny_value = quote! {
                 if let Err(err) = internal::deny_value(#name) {
@@ -118,7 +116,7 @@ pub fn external(_attr: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         // get the needed storage
-        let storage = if needed_purity == Pure {
+        let storage = if needed_purity == Purity::Pure {
             quote!()
         } else if has_self {
             quote! { core::borrow::BorrowMut::borrow_mut(storage), }
@@ -179,7 +177,7 @@ pub fn external(_attr: TokenStream, input: TokenStream) -> TokenStream {
             ReturnType::Type(_, ty) => quote! { write_solidity_returns::<#ty>(f)?; },
         };
         let sol_purity = match purity {
-            Write => "".to_string(),
+            Purity::Write => "".to_string(),
             x => format!(" {x}"),
         };
 
@@ -204,7 +202,7 @@ pub fn external(_attr: TokenStream, input: TokenStream) -> TokenStream {
     // collect inherits
     let mut inherits = vec![];
     for attr in mem::take(&mut input.attrs) {
-        if !attr.path.is_ident("inherit") {
+        if !attr.path().is_ident("inherit") {
             input.attrs.push(attr);
             continue;
         }

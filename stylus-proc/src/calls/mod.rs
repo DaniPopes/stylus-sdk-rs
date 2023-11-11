@@ -8,7 +8,7 @@ use proc_macro2::Ident;
 use quote::quote;
 use sha3::{Digest, Keccak256};
 use std::borrow::Cow;
-use syn_solidity::{FunctionAttribute, Item, Mutability, SolIdent, Visibility};
+use syn_solidity::{FunctionAttribute, Item, Mutability, SolIdent, Spanned, Visibility};
 
 pub fn sol_interface(input: TokenStream) -> TokenStream {
     let input = match syn_solidity::parse(input) {

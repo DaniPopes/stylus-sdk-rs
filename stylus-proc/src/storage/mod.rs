@@ -28,12 +28,12 @@ pub fn solidity_storage(_attr: TokenStream, input: TokenStream) -> TokenStream {
         // implement borrows (TODO: use drain_filter when stable)
         let attrs = mem::take(&mut field.attrs);
         for attr in attrs {
-            if !attr.path.is_ident("borrow") {
+            if !attr.path().is_ident("borrow") {
                 field.attrs.push(attr);
                 continue;
             }
-            if !attr.tokens.is_empty() {
-                error!(attr.tokens, "borrow attribute does not take parameters");
+            if attr.meta.require_path_only().is_err() {
+                error!(attr.meta, "borrow attribute does not take parameters")
             }
             let ty = &field.ty;
             let accessor = match field.ident.as_ref() {
